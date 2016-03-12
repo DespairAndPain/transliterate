@@ -3,8 +3,8 @@ import glob
 import csv
 import zipfile
 
-from transliterate import translit, get_available_language_codes
-from flask import Flask, render_template, request, redirect, send_from_directory
+from transliterate import translit
+from flask import Flask, render_template, request,  send_from_directory
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
@@ -15,12 +15,12 @@ UPLOAD_FOLDER = os.path.join(APP_STATIC, 'uploads')
 app.config['ALLOWED_EXTENSIONS'] = set(['csv'])
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-
+# только .csv файлы
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1] in app.config['ALLOWED_EXTENSIONS']
 
-
+# если .csv то сохранет во временный каталог "uploads"
 def handle_file(f):
     if not allowed_file(f.filename):
         return
@@ -30,31 +30,37 @@ def handle_file(f):
 
 
 @app.route('/')
-def hello_world():
+def home():
     return render_template('home.html')
 
 
+# POST запрос с присланными данными
 @app.route('/upload', methods=['POST'])
 def upload():
+    # удалить все данные из временных каталогов
     folders = [APP_STATIC+'/for_load/*', APP_STATIC+'/uploads/*', APP_STATIC+'/zip/*']
     for del_files in folders:
         files = glob.glob(del_files)
         for f in files:
             os.remove(f)
 
+    # по имени с input длять файлы и сохранить во временный каталог
     files = request.files.getlist('file[]')
     if files:
         for file in files:
             handle_file(file)
-    return redirect('/open', code=200)
+    opener()
+    # выгрузка обратно zip файла со всеми транлитерированными наборами данных
+    uploads = APP_STATIC+'/zip/'
+    return send_from_directory(directory=uploads, filename='files.zip')
 
 
-@app.route('/open')
 def opener():
+    dict_lines = {}
 
-
-    dict = {}
+    # массив названий файлов для записи в zip файл
     files_name = []
+
     for root, dirs, files in os.walk(UPLOAD_FOLDER):
         for file in files:
             files_name.append(file)
@@ -63,20 +69,20 @@ def opener():
                 n = 0
                 for row in spam_reader:
                     if len(row) > 0:
-                        dict[n] = translit(row[0], 'ru', reversed=True)
+                        # транслитерируем и записывам в dict
+                        dict_lines[n] = translit(row[0], 'ru', reversed=True)
                         n += 1
             with open(APP_STATIC+'/for_load/'+file, "w") as wr:
+                # из dict пишем в новый .csv файл
                 write_file = csv.writer(wr, quoting=csv.QUOTE_MINIMAL, delimiter=';')
-                for line in dict.values():
+                for line in dict_lines.values():
                     iter_line = line.split(';')
                     write_file.writerow(iter_line)
-                dict = {}
-    uploads = APP_STATIC+'/zip/'
+                dict_lines = {}
+    # создаём zip файл со всеми изменёнными файлами
     with zipfile.ZipFile(APP_STATIC+'/zip/files.zip', 'w') as zip_file:
         for file in files_name:
             zip_file.write(APP_STATIC+'/for_load/'+file)
-
-    return send_from_directory(directory=uploads, filename='files.zip')
 
 if __name__ == '__main__':
     app.run()
