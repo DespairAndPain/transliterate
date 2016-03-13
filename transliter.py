@@ -3,6 +3,7 @@ import glob
 import csv
 import zipfile
 
+from os.path import basename
 from transliterate import translit
 from flask import Flask, render_template, request,  send_from_directory
 from werkzeug.utils import secure_filename
@@ -25,6 +26,7 @@ def handle_file(f):
     if not allowed_file(f.filename):
         return
     filename = secure_filename(f.filename)
+    print(filename)
     f.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
     return filename
 
@@ -72,7 +74,7 @@ def opener():
                         # транслитерируем и записывам в dict
                         dict_lines[n] = translit(row[0], 'ru', reversed=True)
                         n += 1
-            with open(APP_STATIC+'/for_load/'+file, "w") as wr:
+            with open(APP_STATIC+'/for_load/'+file, "w", encoding='utf-8') as wr:
                 # из dict пишем в новый .csv файл
                 write_file = csv.writer(wr, quoting=csv.QUOTE_MINIMAL, delimiter=';')
                 for line in dict_lines.values():
@@ -82,7 +84,10 @@ def opener():
     # создаём zip файл со всеми изменёнными файлами
     with zipfile.ZipFile(APP_STATIC+'/zip/files.zip', 'w') as zip_file:
         for file in files_name:
-            zip_file.write(APP_STATIC+'/for_load/'+file)
+            path = APP_STATIC+'/for_load/'+file
+            zip_file.write(path, basename(path))
 
 if __name__ == '__main__':
     app.run()
+
+# файлам дописывается название папки потому что в home.html в input'е стоит  "webkitdirectory directory"
